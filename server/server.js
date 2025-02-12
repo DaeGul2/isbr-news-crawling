@@ -16,12 +16,12 @@ const NAVER_CLIENT_SECRET = process.env.NAVER_CLIENT_SECRET;
 // 네이버 뉴스 API 프록시 엔드포인트
 app.get("/api/news", async (req, res) => {
   let { query, display, sort } = req.query;
-
-  display = parseInt(display, 10);
+  console.log("server쪽 display : ", display);
+  
   if (isNaN(display) || display < 1 || display > 100) {
     display = 10;
   }
-
+  
   try {
     const response = await axios.get(NAVER_API_URL, {
       headers: {
