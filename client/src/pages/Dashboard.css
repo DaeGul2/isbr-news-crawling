@@ -1,0 +1,108 @@
+.dashboard-container {
+    max-width: 900px;
+    margin: auto;
+  }
+  
+  .title {
+    font-weight: bold;
+    color: #333;
+  }
+  
+  .keyword-container {
+    text-align: center;
+  }
+  
+  .keyword-btn {
+    font-size: 14px;
+    border-radius: 20px;
+    padding: 8px 16px;
+  }
+  
+  .search-card {
+    background: #f8f9fa;
+    border-radius: 10px;
+  }
+  
+  .search-btn {
+    font-size: 18px;
+    padding: 10px 20px;
+    width: 100%;
+    border-radius: 25px;
+  }
+  
+  .news-card {
+    cursor: pointer;
+    transition: transform 0.2s;
+    border-radius: 10px;
+  }
+  
+  .news-card:hover {
+    transform: scale(1.03);
+  }
+  
+  .news-title {
+    font-size: 16px;
+    font-weight: bold;
+  }
+  
+  .news-summary {
+    font-size: 14px;
+    color: #555;
+  }
+  
+  .talking-ideas-card {
+    background: #fdf6e3; /* 부드러운 크림색 배경 */
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+    animation: fadeIn 0.5s ease-in-out;
+  }
+  
+  .talking-title {
+    font-size: 20px;
+    font-weight: bold;
+    color: #333;
+    margin-bottom: 12px;
+    text-align: center;
+  }
+  
+  .talking-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  
+  .talking-item {
+    font-size: 16px;
+    padding: 8px 12px;
+    margin-bottom: 6px;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.05);
+    display: flex;
+    align-items: center;
+    transition: transform 0.2s ease-in-out;
+  }
+  
+  .talking-item:hover {
+    transform: translateX(5px);
+  }
+  
+  .talking-icon {
+    margin-right: 10px;
+    color: #27ae60; /* 체크 아이콘 색상 (녹색) */
+    font-size: 18px;
+  }
+  
+  /* 등장 애니메이션 */
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  

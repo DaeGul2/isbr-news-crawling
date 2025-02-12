@@ -12,6 +12,7 @@ app.use(express.json());
 const NAVER_API_URL = "https://openapi.naver.com/v1/search/news.json";
 const NAVER_CLIENT_ID = process.env.NAVER_CLIENT_ID;
 const NAVER_CLIENT_SECRET = process.env.NAVER_CLIENT_SECRET;
+const SECRET_PASSWORD = process.env.SECRET_PASSWORD;
 
 // 네이버 뉴스 API 프록시 엔드포인트
 app.get("/api/news", async (req, res) => {
