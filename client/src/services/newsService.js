@@ -53,7 +53,7 @@ export const summarizeNewsWithGPT = async (newsData,limit, keyword, category) =>
 
       📌 JSON 형식:
        {
-        "talking": ["아래 뉴스 전체들의 주제들을 통해, 해당 기관의 채용담당자와 상의해보면 좋을 아이디어들"],
+        "talking": ["아래 뉴스 중, 내가 너한테 준 카테고리${category}와 관련해 해당 기관의 채용담당자와 상의해보면 좋을 아이디어들"],
         "news": [
           {
             "title": "뉴스 제목",
