@@ -1,3 +1,4 @@
+// client/src/pages/Dashboard.js
 import React, { useState, useEffect } from "react";
 import { fetchNews } from "../services/newsService";
 import {
@@ -18,12 +19,16 @@ import "./Dashboard.css";
 const Dashboard = () => {
   const savedNews = JSON.parse(localStorage.getItem("news")) || [];
   const savedTalking = JSON.parse(localStorage.getItem("talking")) || [];
+  const savedPassword = localStorage.getItem("newsletterPassword") || "";
 
   const [keyword, setKeyword] = useState("");
   const [category, setCategory] = useState("최신 동향");
   const [limit, setLimit] = useState(10);
+  const [password, setPassword] = useState(savedPassword);
+
   const [news, setNews] = useState(savedNews);
   const [talking, setTalking] = useState(savedTalking);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -45,6 +50,10 @@ const Dashboard = () => {
   useEffect(() => {
     localStorage.setItem("lastSearchMeta", JSON.stringify(lastSearchMeta));
   }, [lastSearchMeta]);
+
+  useEffect(() => {
+    localStorage.setItem("newsletterPassword", password || "");
+  }, [password]);
 
   const formatDate = (dateString) => {
     if (!dateString) return "날짜 없음";
@@ -92,8 +101,7 @@ const Dashboard = () => {
     return "secondary";
   };
 
-  // ✅ 엑셀 다운로드
-  // ✅ 엑셀 다운로드 (교체용: handleDownloadExcel 함수만)
+  // ✅ 엑셀 다운로드 (관련도 포함 + 중복 컬럼 제거 + talking 시트 추가)
   const handleDownloadExcel = () => {
     if (!news || news.length === 0) {
       alert("다운로드할 뉴스가 없습니다. 먼저 검색하세요.");
@@ -107,45 +115,6 @@ const Dashboard = () => {
       fetchedAt: new Date().toISOString(),
     };
 
-    const safeScore = (v) => {
-      const n = Number(v);
-      if (!Number.isFinite(n)) return 0;
-      return Math.max(0, Math.min(100, Math.round(n)));
-    };
-
-    const stripHtml = (s) => String(s || "").replace(/<[^>]*>/g, "").trim();
-
-    const safeFilePart = (s) =>
-      String(s || "")
-        .replace(/[\\/:*?"<>|]/g, "_")
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 40);
-
-    const formatKstForFilename = (d = new Date()) => {
-      const kst = new Date(d.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
-      const yyyy = kst.getFullYear();
-      const mm = String(kst.getMonth() + 1).padStart(2, "0");
-      const dd = String(kst.getDate()).padStart(2, "0");
-      const hh = String(kst.getHours()).padStart(2, "0");
-      const mi = String(kst.getMinutes()).padStart(2, "0");
-      return `${yyyy}${mm}${dd}_${hh}${mi}`;
-    };
-
-    const formatDate = (dateString) => {
-      if (!dateString) return "날짜 없음";
-      const date = new Date(dateString);
-      return new Intl.DateTimeFormat("ko-KR", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        timeZone: "Asia/Seoul",
-      }).format(date);
-    };
-
     // 1) 메타 시트
     const metaRows = [
       { 항목: "뉴스 키워드", 값: meta.keyword ?? "" },
@@ -156,20 +125,20 @@ const Dashboard = () => {
       { 항목: "결과 뉴스 개수", 값: news.length },
     ];
 
-    // 2) 뉴스목록 시트 (중복 컬럼 제거: 제목/요약은 "텍스트만" 남김)
+    // 2) 뉴스목록 시트 (제목/요약은 텍스트만)
     const newsRows = news.map((item, idx) => {
       const keywordsArr = Array.isArray(item?.keywords)
         ? item.keywords
         : item?.keywords
-          ? [String(item.keywords)]
-          : [];
+        ? [String(item.keywords)]
+        : [];
 
       return {
         번호: idx + 1,
         관련도점수: safeScore(item?.relevanceScore),
         작성일: formatDate(item?.date),
-        제목: stripHtml(item?.title ?? ""),   // ✅ 하나만
-        요약: stripHtml(item?.summary ?? ""), // ✅ 하나만
+        제목: stripHtml(item?.title ?? ""),
+        요약: stripHtml(item?.summary ?? ""),
         키워드: keywordsArr.join(", "),
         출처: item?.source ?? "",
       };
@@ -179,9 +148,9 @@ const Dashboard = () => {
     const talkingRows =
       Array.isArray(talking) && talking.length
         ? talking.map((t, i) => ({
-          번호: i + 1,
-          추천주제: String(t || "").trim(),
-        }))
+            번호: i + 1,
+            추천주제: String(t || "").trim(),
+          }))
         : [{ 번호: 1, 추천주제: "(추천 주제가 없습니다)" }];
 
     const wb = XLSX.utils.book_new();
@@ -192,13 +161,13 @@ const Dashboard = () => {
 
     const wsNews = XLSX.utils.json_to_sheet(newsRows);
     wsNews["!cols"] = [
-      { wch: 6 },   // 번호
-      { wch: 10 },  // 관련도점수
-      { wch: 22 },  // 작성일
-      { wch: 50 },  // 제목
-      { wch: 70 },  // 요약
-      { wch: 40 },  // 키워드
-      { wch: 50 },  // 출처
+      { wch: 6 }, // 번호
+      { wch: 10 }, // 관련도점수
+      { wch: 22 }, // 작성일
+      { wch: 50 }, // 제목
+      { wch: 70 }, // 요약
+      { wch: 40 }, // 키워드
+      { wch: 50 }, // 출처
     ];
     XLSX.utils.book_append_sheet(wb, wsNews, "뉴스목록");
 
@@ -213,22 +182,29 @@ const Dashboard = () => {
     XLSX.writeFile(wb, filename, { compression: true });
   };
 
-
-  // 뉴스 검색
+  // ✅ 뉴스 검색
   const handleSearch = async () => {
     if (!keyword) {
       alert("뉴스 키워드을 입력하세요!");
+      return;
+    }
+    if (!password) {
+      alert("비밀번호를 입력하세요!");
       return;
     }
 
     setLoading(true);
     setError(null);
 
-    try {
-      const results = await fetchNews(keyword, category, limit);
+    // ✅ 분석 끝나기 전엔 화면 비우기(착시 방지)
+    setNews([]);
+    setTalking([]);
 
-      setNews(results.news);
-      setTalking(results.talking);
+    try {
+      const results = await fetchNews(keyword, category, limit, password);
+
+      setNews(results.news || []);
+      setTalking(results.talking || []);
 
       const meta = {
         keyword,
@@ -238,10 +214,20 @@ const Dashboard = () => {
       };
       setLastSearchMeta(meta);
 
-      localStorage.setItem("news", JSON.stringify(results.news));
-      localStorage.setItem("talking", JSON.stringify(results.talking));
+      localStorage.setItem("news", JSON.stringify(results.news || []));
+      localStorage.setItem("talking", JSON.stringify(results.talking || []));
     } catch (err) {
-      setError("뉴스를 가져오는 중 오류가 발생했습니다.");
+      const status = err?.response?.status;
+      const msg =
+        err?.response?.data?.error ||
+        err?.response?.data?.message ||
+        "뉴스를 가져오는 중 오류가 발생했습니다.";
+
+      if (status === 401) {
+        setError(`인증 실패: 비밀번호가 올바르지 않습니다.`);
+      } else {
+        setError(msg);
+      }
       console.error(err);
     }
 
@@ -292,6 +278,21 @@ const Dashboard = () => {
                   value={limit}
                   onChange={(e) => setLimit(Number(e.target.value))}
                 />
+              </Form.Group>
+            </Col>
+
+            <Col md={6} className="mb-3">
+              <Form.Group>
+                <Form.Label>🔒 비밀번호</Form.Label>
+                <Form.Control
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="서버 접근 비밀번호"
+                />
+                <Form.Text className="text-muted">
+                  서버의 SECRET_PASSWORD와 일치해야 뉴스레터 생성이 진행됩니다.
+                </Form.Text>
               </Form.Group>
             </Col>
           </Row>
@@ -353,17 +354,21 @@ const Dashboard = () => {
                 >
                   <Card.Body>
                     <div className="d-flex justify-content-between align-items-center mb-2">
-                      <Badge bg={scoreBadgeBg(score)}>
-                        관련도 {score}
-                      </Badge>
-                      <small className="text-muted">{formatDate(item.date)}</small>
+                      <Badge bg={scoreBadgeBg(score)}>관련도 {score}</Badge>
+                      <small className="text-muted">
+                        {formatDate(item?.date)}
+                      </small>
                     </div>
 
-                    <Card.Title className="news-title">{item.title}</Card.Title>
-                    <Card.Text className="news-summary">{item.summary}</Card.Text>
+                    <Card.Title className="news-title">
+                      {item?.title}
+                    </Card.Title>
+                    <Card.Text className="news-summary">
+                      {item?.summary}
+                    </Card.Text>
 
                     <div className="mt-2">
-                      {item.keywords &&
+                      {Array.isArray(item?.keywords) &&
                         item.keywords.map((kw, i) => (
                           <Badge key={i} bg="dark" className="me-1">
                             {kw}
