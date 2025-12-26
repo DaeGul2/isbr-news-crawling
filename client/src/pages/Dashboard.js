@@ -1,11 +1,21 @@
 import React, { useState, useEffect } from "react";
 import { fetchNews } from "../services/newsService";
-import { Container, Form, Button, Card, Spinner, Alert, Badge, Row, Col } from "react-bootstrap";
+import {
+  Container,
+  Form,
+  Button,
+  Card,
+  Spinner,
+  Alert,
+  Badge,
+  Row,
+  Col,
+} from "react-bootstrap";
 import { useNavigate } from "react-router-dom";
-import "./Dashboard.css"; // ✅ 추가된 CSS 파일 (별도 생성 필요)
+import * as XLSX from "xlsx";
+import "./Dashboard.css";
 
 const Dashboard = () => {
-  // ✅ `localStorage`에서 데이터 불러오기
   const savedNews = JSON.parse(localStorage.getItem("news")) || [];
   const savedTalking = JSON.parse(localStorage.getItem("talking")) || [];
 
@@ -17,6 +27,14 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  const [lastSearchMeta, setLastSearchMeta] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("lastSearchMeta")) || null;
+    } catch {
+      return null;
+    }
+  });
+
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -24,8 +42,9 @@ const Dashboard = () => {
     localStorage.setItem("talking", JSON.stringify(talking));
   }, [news, talking]);
 
-  // 자주 쓰는 키워드 리스트
-  const popularKeywords = ["한국해외인프라도시개발지원공사(kind)", "KIAT 한국산업기술진흥원", "마사회", "건설근로자공제회"];
+  useEffect(() => {
+    localStorage.setItem("lastSearchMeta", JSON.stringify(lastSearchMeta));
+  }, [lastSearchMeta]);
 
   const formatDate = (dateString) => {
     if (!dateString) return "날짜 없음";
@@ -41,10 +60,164 @@ const Dashboard = () => {
     }).format(date);
   };
 
+  const stripHtml = (s) => String(s || "").replace(/<[^>]*>/g, "").trim();
+
+  const safeFilePart = (s) =>
+    String(s || "")
+      .replace(/[\\/:*?"<>|]/g, "_")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 40);
+
+  const formatKstForFilename = (d = new Date()) => {
+    const kst = new Date(d.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+    const yyyy = kst.getFullYear();
+    const mm = String(kst.getMonth() + 1).padStart(2, "0");
+    const dd = String(kst.getDate()).padStart(2, "0");
+    const hh = String(kst.getHours()).padStart(2, "0");
+    const mi = String(kst.getMinutes()).padStart(2, "0");
+    return `${yyyy}${mm}${dd}_${hh}${mi}`;
+  };
+
+  const safeScore = (v) => {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return 0;
+    return Math.max(0, Math.min(100, Math.round(n)));
+  };
+
+  const scoreBadgeBg = (score) => {
+    if (score >= 80) return "success";
+    if (score >= 50) return "primary";
+    if (score >= 30) return "warning";
+    return "secondary";
+  };
+
+  // ✅ 엑셀 다운로드
+  // ✅ 엑셀 다운로드 (교체용: handleDownloadExcel 함수만)
+  const handleDownloadExcel = () => {
+    if (!news || news.length === 0) {
+      alert("다운로드할 뉴스가 없습니다. 먼저 검색하세요.");
+      return;
+    }
+
+    const meta = lastSearchMeta || {
+      keyword,
+      category,
+      limit,
+      fetchedAt: new Date().toISOString(),
+    };
+
+    const safeScore = (v) => {
+      const n = Number(v);
+      if (!Number.isFinite(n)) return 0;
+      return Math.max(0, Math.min(100, Math.round(n)));
+    };
+
+    const stripHtml = (s) => String(s || "").replace(/<[^>]*>/g, "").trim();
+
+    const safeFilePart = (s) =>
+      String(s || "")
+        .replace(/[\\/:*?"<>|]/g, "_")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 40);
+
+    const formatKstForFilename = (d = new Date()) => {
+      const kst = new Date(d.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+      const yyyy = kst.getFullYear();
+      const mm = String(kst.getMonth() + 1).padStart(2, "0");
+      const dd = String(kst.getDate()).padStart(2, "0");
+      const hh = String(kst.getHours()).padStart(2, "0");
+      const mi = String(kst.getMinutes()).padStart(2, "0");
+      return `${yyyy}${mm}${dd}_${hh}${mi}`;
+    };
+
+    const formatDate = (dateString) => {
+      if (!dateString) return "날짜 없음";
+      const date = new Date(dateString);
+      return new Intl.DateTimeFormat("ko-KR", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        timeZone: "Asia/Seoul",
+      }).format(date);
+    };
+
+    // 1) 메타 시트
+    const metaRows = [
+      { 항목: "뉴스 키워드", 값: meta.keyword ?? "" },
+      { 항목: "중점 키워드", 값: meta.category ?? "" },
+      { 항목: "요청 뉴스 개수", 값: meta.limit ?? "" },
+      { 항목: "가져온 시각(ISO)", 값: meta.fetchedAt ?? "" },
+      { 항목: "가져온 시각(KST)", 값: formatDate(meta.fetchedAt) },
+      { 항목: "결과 뉴스 개수", 값: news.length },
+    ];
+
+    // 2) 뉴스목록 시트 (중복 컬럼 제거: 제목/요약은 "텍스트만" 남김)
+    const newsRows = news.map((item, idx) => {
+      const keywordsArr = Array.isArray(item?.keywords)
+        ? item.keywords
+        : item?.keywords
+          ? [String(item.keywords)]
+          : [];
+
+      return {
+        번호: idx + 1,
+        관련도점수: safeScore(item?.relevanceScore),
+        작성일: formatDate(item?.date),
+        제목: stripHtml(item?.title ?? ""),   // ✅ 하나만
+        요약: stripHtml(item?.summary ?? ""), // ✅ 하나만
+        키워드: keywordsArr.join(", "),
+        출처: item?.source ?? "",
+      };
+    });
+
+    // 3) 뉴스레터 추천 주제 시트 (talking)
+    const talkingRows =
+      Array.isArray(talking) && talking.length
+        ? talking.map((t, i) => ({
+          번호: i + 1,
+          추천주제: String(t || "").trim(),
+        }))
+        : [{ 번호: 1, 추천주제: "(추천 주제가 없습니다)" }];
+
+    const wb = XLSX.utils.book_new();
+
+    const wsMeta = XLSX.utils.json_to_sheet(metaRows);
+    wsMeta["!cols"] = [{ wch: 18 }, { wch: 60 }];
+    XLSX.utils.book_append_sheet(wb, wsMeta, "메타정보");
+
+    const wsNews = XLSX.utils.json_to_sheet(newsRows);
+    wsNews["!cols"] = [
+      { wch: 6 },   // 번호
+      { wch: 10 },  // 관련도점수
+      { wch: 22 },  // 작성일
+      { wch: 50 },  // 제목
+      { wch: 70 },  // 요약
+      { wch: 40 },  // 키워드
+      { wch: 50 },  // 출처
+    ];
+    XLSX.utils.book_append_sheet(wb, wsNews, "뉴스목록");
+
+    const wsTalking = XLSX.utils.json_to_sheet(talkingRows);
+    wsTalking["!cols"] = [{ wch: 6 }, { wch: 90 }];
+    XLSX.utils.book_append_sheet(wb, wsTalking, "뉴스레터 추천 주제");
+
+    const filename = `뉴스_${safeFilePart(meta.keyword)}_${formatKstForFilename(
+      new Date()
+    )}.xlsx`;
+
+    XLSX.writeFile(wb, filename, { compression: true });
+  };
+
+
   // 뉴스 검색
   const handleSearch = async () => {
     if (!keyword) {
-      alert("기관명을 입력하세요!");
+      alert("뉴스 키워드을 입력하세요!");
       return;
     }
 
@@ -53,8 +226,18 @@ const Dashboard = () => {
 
     try {
       const results = await fetchNews(keyword, category, limit);
+
       setNews(results.news);
       setTalking(results.talking);
+
+      const meta = {
+        keyword,
+        category,
+        limit,
+        fetchedAt: new Date().toISOString(),
+      };
+      setLastSearchMeta(meta);
+
       localStorage.setItem("news", JSON.stringify(results.news));
       localStorage.setItem("talking", JSON.stringify(results.talking));
     } catch (err) {
@@ -69,30 +252,31 @@ const Dashboard = () => {
     <Container className="dashboard-container mt-4">
       <h2 className="text-center title">📢 최신 뉴스 검색</h2>
 
-      {/* 자주 쓰는 키워드 버튼 */}
-      <div className="keyword-container mb-3">
-        {popularKeywords.map((word) => (
-          <Button key={word} variant="outline-dark" className="keyword-btn me-2 mb-2" onClick={() => setKeyword(word)}>
-            {word}
-          </Button>
-        ))}
-      </div>
-
       {/* 검색 폼 */}
       <Card className="search-card p-4 shadow-sm">
         <Form>
           <Row>
             <Col md={6} className="mb-3">
               <Form.Group>
-                <Form.Label>📌 기관명</Form.Label>
-                <Form.Control type="text" value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="기관명을 입력하세요" />
+                <Form.Label>📌 뉴스 키워드</Form.Label>
+                <Form.Control
+                  type="text"
+                  value={keyword}
+                  onChange={(e) => setKeyword(e.target.value)}
+                  placeholder="뉴스 키워드을 입력하세요"
+                />
               </Form.Group>
             </Col>
 
             <Col md={6} className="mb-3">
               <Form.Group>
-                <Form.Label>🔍 검색 키워드</Form.Label>
-                <Form.Control type="text" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="예: 채용 동향" />
+                <Form.Label>🔍 뉴스 내에서 중점으로 볼 키워드</Form.Label>
+                <Form.Control
+                  type="text"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  placeholder="예: 채용 동향"
+                />
               </Form.Group>
             </Col>
           </Row>
@@ -101,14 +285,35 @@ const Dashboard = () => {
             <Col md={6} className="mb-3">
               <Form.Group>
                 <Form.Label>📅 뉴스 개수</Form.Label>
-                <Form.Control type="number" min="1" max="25" value={limit} onChange={(e) => setLimit(Number(e.target.value))} />
+                <Form.Control
+                  type="number"
+                  min="1"
+                  max="25"
+                  value={limit}
+                  onChange={(e) => setLimit(Number(e.target.value))}
+                />
               </Form.Group>
             </Col>
           </Row>
 
-          <div className="text-center">
-            <Button variant="dark" className="search-btn" onClick={handleSearch} disabled={loading}>
+          <div className="text-center d-flex justify-content-center gap-2">
+            <Button
+              variant="dark"
+              className="search-btn"
+              onClick={handleSearch}
+              disabled={loading}
+            >
               {loading ? <Spinner animation="border" size="sm" /> : "🔍 뉴스 검색"}
+            </Button>
+
+            <Button
+              variant="outline-success"
+              className="search-btn"
+              onClick={handleDownloadExcel}
+              disabled={loading || !news || news.length === 0}
+              title="현재 화면의 뉴스 데이터를 엑셀로 다운로드"
+            >
+              📥 엑셀 다운로드
             </Button>
           </div>
         </Form>
@@ -128,27 +333,48 @@ const Dashboard = () => {
       )}
 
       {/* 오류 메시지 */}
-      {error && <Alert variant="danger" className="mt-3">{error}</Alert>}
+      {error && (
+        <Alert variant="danger" className="mt-3">
+          {error}
+        </Alert>
+      )}
 
       {/* 검색 결과 */}
       {news.length > 0 && (
         <Row className="mt-4">
-          {news.map((item, index) => (
-            <Col md={6} lg={4} key={index} className="mb-4">
-              <Card className="news-card shadow-sm" onClick={() => navigate("/detail", { state: item })}>
-                <Card.Body>
-                  <Card.Title className="news-title">{item.title}</Card.Title>
-                  <Card.Text className="news-summary">{item.summary}</Card.Text>
-                  <small className="text-muted">{formatDate(item.date)}</small>
-                  <div className="mt-2">
-                    {item.keywords && item.keywords.map((kw, i) => (
-                      <Badge key={i} bg="dark" className="me-1">{kw}</Badge>
-                    ))}
-                  </div>
-                </Card.Body>
-              </Card>
-            </Col>
-          ))}
+          {news.map((item, index) => {
+            const score = safeScore(item?.relevanceScore);
+
+            return (
+              <Col md={6} lg={4} key={index} className="mb-4">
+                <Card
+                  className="news-card shadow-sm"
+                  onClick={() => navigate("/detail", { state: item })}
+                >
+                  <Card.Body>
+                    <div className="d-flex justify-content-between align-items-center mb-2">
+                      <Badge bg={scoreBadgeBg(score)}>
+                        관련도 {score}
+                      </Badge>
+                      <small className="text-muted">{formatDate(item.date)}</small>
+                    </div>
+
+                    <Card.Title className="news-title">{item.title}</Card.Title>
+                    <Card.Text className="news-summary">{item.summary}</Card.Text>
+
+                    <div className="mt-2">
+                      {item.keywords &&
+                        item.keywords.map((kw, i) => (
+                          <Badge key={i} bg="dark" className="me-1">
+                            {kw}
+                          </Badge>
+                        ))}
+                    </div>
+                  </Card.Body>
+                </Card>
+              </Col>
+            );
+          })}
         </Row>
       )}
     </Container>

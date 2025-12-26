@@ -18,6 +18,19 @@ const Detail = () => {
     );
   }
 
+  const safeScore = (v) => {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return 0;
+    return Math.max(0, Math.min(100, Math.round(n)));
+  };
+
+  const scoreBadgeBg = (score) => {
+    if (score >= 80) return "success";
+    if (score >= 50) return "primary";
+    if (score >= 30) return "warning";
+    return "secondary";
+  };
+
   // 한국 시간(KST) 기준으로 날짜 변환 함수
   const formatDate = (dateString) => {
     if (!dateString) return "날짜 없음";
@@ -33,17 +46,24 @@ const Detail = () => {
     }).format(date);
   };
 
+  const score = safeScore(newsItem?.relevanceScore);
+
   return (
     <Container className="mt-4">
+      <div className="d-flex align-items-center gap-2 mb-2">
+        <Badge bg={scoreBadgeBg(score)}>관련도 {score}</Badge>
+        <span className="text-muted">{formatDate(newsItem.date)}</span>
+      </div>
+
       <h2>{newsItem.title}</h2>
       <p className="mt-3">{newsItem.summary}</p>
+
       <p>
         <strong>출처:</strong>{" "}
         <a href={newsItem.source} target="_blank" rel="noopener noreferrer">
           {newsItem.source}
         </a>
       </p>
-      <p><strong>발행 날짜:</strong> {formatDate(newsItem.date)}</p>
 
       {/* ✅ 키워드 태그 표시 */}
       {newsItem.keywords && newsItem.keywords.length > 0 && (
@@ -51,7 +71,9 @@ const Detail = () => {
           <strong>연관 키워드:</strong>
           <div className="mt-2">
             {newsItem.keywords.map((kw, i) => (
-              <Badge key={i} bg="primary" className="me-1">{kw}</Badge>
+              <Badge key={i} bg="primary" className="me-1">
+                {kw}
+              </Badge>
             ))}
           </div>
         </div>
